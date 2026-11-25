@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SeismicWatch report</title>
+<style>
+  @page { size: A4; margin: 18mm 17mm 18mm 17mm; }
+  body { font-family: "Source Serif 4", "Georgia", serif; font-size: 10.6pt; line-height: 1.42; color: #1d2733; }
+  h1 { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 22pt; margin: 0 0 2mm; letter-spacing: 0.2px; }
+  h2 { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 13.5pt; margin: 7mm 0 2mm; padding-bottom: 1mm;
+       border-bottom: 1.2px solid #c0392b; break-after: avoid; }
+  h3 { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 11pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p { margin: 0 0 2.2mm; text-align: left; }
+  ul, ol { margin: 0 0 2.5mm; padding-left: 5.5mm; }
+  li { margin-bottom: 0.8mm; }
+  code { font-family: "JetBrains Mono", Menlo, Consolas, monospace; font-size: 8.8pt; background: #f2f4f6; padding: 0 2px;
+         border-radius: 2px; }
+  pre { font-family: "JetBrains Mono", Menlo, Consolas, monospace; font-size: 7.6pt; background: #f4f6f8; padding: 2.5mm 3mm;
+        border-radius: 3px; white-space: pre-wrap; line-height: 1.35; margin: 1mm 0 3mm; break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; margin: 1.5mm 0 3.5mm; font-family: "Helvetica Neue", Arial, sans-serif;
+          font-size: 8.4pt; break-inside: avoid; }
+  th, td { border-bottom: 0.6px solid #cfd6dd; padding: 1.1mm 1.6mm; text-align: left; vertical-align: top; }
+  th { background: #eef2f5; font-weight: 600; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  figure { margin: 2mm 0 4mm; break-inside: avoid; }
+  figure img { width: 100%; border: 0.6px solid #d5dbe1; }
+  figcaption { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 8.2pt; color: #5b6774; margin-top: 1mm; }
+  .meta { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 9.5pt; color: #3b4652; margin-bottom: 5mm; }
+  .meta b { color: #1d2733; }
+  .answer { background: #fbf1ef; border-left: 3px solid #c0392b; padding: 2.5mm 3.5mm; margin: 2mm 0 4mm; break-inside: avoid; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+  .small { font-size: 9pt; }
+  .pass { color: #1e7a46; font-weight: 600; } .fail { color: #b03a2e; font-weight: 600; }
+  .pb { break-before: page; }
+</style>
+</head>
+<body>
+
+<h1>SeismicWatch</h1>
+<div class="meta">
+  <b>M4+ earthquakes around Lebanon, Turkey and Cyprus: how often, where, and which towns are closest</b><br>
+  DSC 620 Data Engineering, Lebanese American University, Fall 2026 · Instructor: Dr. Ahmad Audi<br>
+  Tala Mezher (202200920) and Sireen Hammoud (202206566) · Repository:
+  <code>github.com/talamezher/seismicwatch</code> (tag v1.0)
+</div>
+
+<h2>1. Question and users</h2>
+<p><b>Question.</b> How often do earthquakes of magnitude 4 or more occur around Lebanon, Turkey and Cyprus,
+where, and which populated places are closest to them? The period is the ten years from 14 November 2016
+to 14 November 2026; the pipeline keeps running after that date and the dashboard lets the user move the
+period.</p>
+<p><b>Users.</b> The pipeline is built for people who plan for earthquakes rather than study them:
+civil-protection and municipal planners who need to know which towns are hit most often, insurers who price
+exposure by area, and journalists or residents who want a checked number instead of a headline. They need
+three things: a count per country and per year, a map, and a ranking of towns by how many earthquakes
+struck within 25 or 50 km of them. Seismologists already have better tools; we do not compete with them.</p>
+<p>This report is written for a data team that takes the pipeline over. Every number below comes from the
+run of 25 November 2026 (run ids <code>20261125T130543Z</code> to <code>20261125T130639Z</code>), and can be
+checked in the warehouse with <code>python scripts/run_report.py</code>.</p>
+
+<h2>2. Sources</h2>
+<table>
+  <tr><th>Source</th><th>Type</th><th>Access</th><th class="n">Volume (this run)</th><th>Update frequency</th><th>Terms</th></tr>
+  <tr><td>USGS earthquake catalogue (FDSN event service)</td><td>API, GeoJSON</td><td>free, no key; at most 20,000 events per query; <code>limit</code>/<code>offset</code> paging</td>
+      <td class="n">2,753 events, 11 pages, 1.9 MB</td><td>minutes; events revised for weeks or years</td><td>public domain (U.S. Government)</td></tr>
+  <tr><td>GeoNames gazetteer: <code>LB</code>, <code>TR</code>, <code>CY</code>, <code>cities1000</code></td><td>files, zipped TSV, UTF-8, no header</td><td>free download</td>
+      <td class="n">306,958 lines, 4 files, 16.2 MB</td><td>regenerated daily</td><td>CC BY 4.0 (credit GeoNames)</td></tr>
+  <tr><td>Wikipedia, "List of earthquakes in Turkey"</td><td>web page, HTML tables</td><td>robots.txt allows <code>/wiki/</code></td>
+      <td class="n">1 page, 3 tables, 100 rows, 0.6 MB</td><td>irregular edits</td><td>CC BY-SA 4.0 (credit, share alike)</td></tr>
+</table>
+<p>We profiled each source before writing any cleaning code (<code>python -m src.transform.profile</code>,
+full output in <code>docs/profiling.md</code>). What profiling showed:</p>
+<ul>
+  <li><b>USGS.</b> The data is tidier than we expected: every event is <code>reviewed</code>, from network
+  <code>us</code>, of type <code>earthquake</code>, with three magnitude types (<code>mb</code> 2,196,
+  <code>mwr</code> 300, <code>mww</code> 257). Three problems were hidden in it. <b>68% of the depths are exactly
+  10 km</b>, the default USGS uses when it cannot resolve the depth. <b>298 place texts lost their accented
+  letters at the source</b> ("Marmara Ere?lisi", "Do?anyol"), mostly in 2019 to 2023; the raw file already
+  contains the <code>?</code>. And <b>two ids are the same earthquake</b>: <code>us70009ad8</code> and
+  <code>us70009adb</code> are 0.1 s and 1.3 km apart, with the same place text and magnitudes 4.6 and 4.5.
+  <code>felt</code> is missing for 70% of events and <code>alert</code> for 97%, so we do not use them.</li>
+  <li><b>GeoNames.</b> A town of Lebanon, Turkey or Cyprus appears in its country file and again in
+  <code>cities1000</code> (2,995 ids in two files). <b>Population 0 means "unknown"</b>: of the 62,870 populated
+  places in our region, 47,559 (76%) have it. <code>dem</code> uses <code>-9999</code> for "no data" (1,594 lines).
+  Admin codes such as <code>07</code> must stay text or they lose their leading zero. 12,061 places are
+  <code>PPLX</code>, sections of a city whose people are already counted in the city.</li>
+  <li><b>Wikipedia.</b> Three tables with slightly different columns (the first has <code>Imax</code>).
+  Magnitudes are text ("7.8 Mw", "6.6–6.9", footnote marks), deaths are text with commas, and the old rows have
+  no full date (only a year, or "c. 1500"). 16 of the 99 rows have no full date and 6 have no readable
+  magnitude; 16 rows fall inside our period.</li>
+</ul>
+
+<h2>3. Architecture</h2>
+<figure><img src="../diagrams/architecture.png" alt="Architecture">
+<figcaption>Figure 1. From the three sources to the dashboard. Each layer only reads the one before it: the raw
+layer is never edited, staging is rebuilt from raw on every run, the warehouse is loaded from staging.</figcaption></figure>
+<p>The code follows the same layers: <code>src/extract</code>, <code>src/transform</code>,
+<code>src/quality</code>, <code>src/load</code>, <code>dashboard</code>. <code>run_pipeline.py</code> calls
+them in order and is the only entry point; GitHub Actions calls the same command every day.</p>
+
+<h2>4. Extraction</h2>
+<p>All three extractors share one HTTP client, <code>PoliteSession</code> (<code>src/extract/http.py</code>). Every
+request carries an honest User-Agent (project name, repository URL and a contact e-mail read from
+<code>.env</code>), a 60-second timeout, and waits at least one second after the previous request to the same
+host. HTTP 429 and 5xx answers, and connection errors, are retried up to five times with exponential backoff
+(2, 4, 8, 16 s, or the server's <code>Retry-After</code>). Any other 4xx is our mistake, so it is raised at once
+and never retried. Every answer is written to <code>data/raw/</code> exactly as received <i>before</i> it is
+parsed (written to a temporary file and renamed, so a crash never leaves half a file) and listed in
+<code>data/raw/manifest.jsonl</code> with the URL, parameters, time, HTTP status, number of records, size
+and SHA-256.</p>
+<h3>USGS (API, full and incremental)</h3>
+<ul>
+  <li><b>Full extraction</b> (first run or <code>--full</code>): the period is cut into calendar-year windows.
+  For each window we ask <code>/count</code> first, then page through <code>/query</code> with
+  <code>limit=1000</code> and <code>offset</code>, ordered by time. Closed windows do not change while we page
+  through them, which keeps offset paging safe, and no window comes close to the 20,000 limit (the largest,
+  2023, holds 714 events in the box). A <code>_checkpoint.json</code> lists the finished windows, so a run that
+  crashes continues where it stopped. The count and the pages are compared; a difference is logged.</li>
+  <li><b>Incremental extraction</b> (every later run): only events with <code>updatedafter</code> = watermark
+  minus a <b>one-day overlap</b>. The watermark is the largest <code>updated</code> time we have loaded; it is
+  saved in <code>data/state/usgs_watermark.json</code> <b>only after the load has succeeded</b>, so a failed run
+  is simply repeated. The incremental query asks for M&nbsp;&ge;&nbsp;3.5, not 4.0: an event revised from 4.1 to
+  3.9 would otherwise never come back, and our warehouse would keep the old 4.1 forever. Revised events replace
+  their old row (staging keeps the newest version of each id); they are never appended.</li>
+</ul>
+<p>In the run of 25 November, the full extraction made 22 requests to USGS and saved 2,753 events. The
+incremental run that followed logged:</p>
+<pre>usgs incremental: 5 event(s) updated after 2026-11-23T20:58:08 (watermark 2026-11-24T20:58:08.040000+00:00 minus 1 day overlap)
+ROWS  raw USGS records 2,758 -> older versions 5 -> quarantined 1 -> loaded 2,752</pre>
+<p>The five events were re-read because of the overlap; they had not changed, so the warehouse stayed
+identical (section 8).</p>
+<h3>GeoNames (files) and Wikipedia (web page)</h3>
+<p><b>GeoNames.</b> Four zip files are downloaded, checked to be real zip files, and read as UTF-8,
+tab-separated, without quoting (names contain quotes) and with every column as text first. GeoNames
+regenerates its files daily, so we send <code>If-Modified-Since</code> with the date of our last copy: an answer
+304 costs nothing and the staging step keeps using the copy on disk. A re-run on the same day overwrites the
+same file instead of adding a second copy. <b>Wikipedia.</b> We read <code>robots.txt</code> first, with our
+own User-Agent (Wikipedia answers 403 to Python's default one, which made <code>RobotFileParser</code> report
+"forbidden" in our first test), check that the page is allowed, download it once and save the HTML before
+<code>pandas.read_html</code> reads it. The extractor raises an error if robots.txt ever disallows the page.</p>
+
+<h2>5. Transformation and data quality</h2>
+<h3>Staging: one table per source</h3>
+<p>Each staging function (<code>src/transform/staging.py</code>) applies the six steps of the Week 5 recipe in the
+same order and saves a Parquet file in <code>data/staging/</code>.</p>
+<table>
+  <tr><th>Step</th><th><code>stg_events</code> (USGS)</th><th><code>stg_places</code> (GeoNames)</th><th><code>stg_wiki_quakes</code> (Wikipedia)</th></tr>
+  <tr><td>1 Rename</td><td><code>properties.mag</code> &rarr; <code>magnitude</code>, coordinates split into longitude, latitude, depth_km</td><td><code>geonameid</code> &rarr; <code>place_id</code>, <code>dem</code> &rarr; <code>dem_m</code></td><td>columns found by keyword (date, place, mag, deaths), the three tables aligned</td></tr>
+  <tr><td>2 Cast</td><td>epoch milliseconds &rarr; UTC timestamps; numbers; nullable integers</td><td>ids and populations to integers; admin codes stay text</td><td>"6 February 2023" &rarr; date; "7.8 Mw" &rarr; 7.8; "50,783" &rarr; 50783</td></tr>
+  <tr><td>3 Standardize</td><td>magnitude type, status, type: trimmed, lower case</td><td>country and feature codes upper case, names trimmed</td><td>footnote marks removed, spacing</td></tr>
+  <tr><td>4 Placeholders</td><td>depth 10.0 marked <code>depth_is_default</code></td><td>population 0 &rarr; missing; dem -9999 &rarr; missing</td><td>"–", "Unknown" &rarr; missing, never 0</td></tr>
+  <tr><td>5 Versions, duplicates</td><td>newest <code>updated</code> per event id; same earthquake under two ids marked</td><td>same id in two files: the country file is kept</td><td>same date, magnitude and place: one row</td></tr>
+  <tr><td>6 Flag</td><td>Q-tests set <code>is_valid</code>, <code>invalid_reason</code></td><td>not a settlement, population unknown, bad coordinates</td><td>no full date, magnitude unreadable</td></tr>
+</table>
+
+<h3>Joins, with their row counts</h3>
+<p>Every join (<code>src/transform/enrich.py</code>) is a left join from the table whose rows must all be kept,
+with <code>validate=</code> and an <code>assert</code> on the row count; the counts are logged and stored in the
+<code>join_log</code> table.</p>
+<table>
+  <tr><th>Join</th><th>validate</th><th class="n">Rows in</th><th class="n">Rows out</th><th class="n">Without a match</th></tr>
+  <tr><td>J1 earthquakes &rarr; nearest settlement (distance, then the place row)</td><td>one_to_one, many_to_one</td><td class="n">2,752</td><td class="n">2,752</td><td class="n">0</td></tr>
+  <tr><td>BR-3 earthquakes &rarr; exposure counts (25 and 50 km)</td><td>one_to_one</td><td class="n">2,752</td><td class="n">2,752</td><td class="n">–</td></tr>
+  <tr><td>J2 earthquakes &rarr; Wikipedia list (BR-4)</td><td>one_to_one</td><td class="n">2,752</td><td class="n">2,752</td><td class="n">2,736</td></tr>
+  <tr><td>J3 earthquake &times; settlement pairs within 50 km &rarr; place rows</td><td>many_to_one</td><td class="n">151,611</td><td class="n">151,611</td><td class="n">0</td></tr>
+</table>
+<p>The nearest place and the pairs within 50 km are computed with the haversine formula in numpy, by blocks of
+250 earthquakes against the 14,922 settlements. All 16 rows of the Wikipedia list that fall in our period matched
+a USGS event. The &plusmn;1 day window was needed: the Bodrum earthquake of 21 July 2017 (local date) is
+20 July 22:31 in UTC.</p>
+
+<h3>Business rules</h3>
+<p>Six rules, each written once in <code>src/transform/rules.py</code>, with its threshold in
+<code>src/config.py</code> and documented in <code>docs/business_rules.md</code>. None reads the clock: the run
+date is passed in.</p>
+<table>
+  <tr><th>Rule</th><th>Decision</th></tr>
+  <tr><td>BR-1 country</td><td>an earthquake belongs to the country of its nearest settlement if that settlement is at most 100 km away, else <code>XX</code> (at sea or remote). We do not trust the USGS place text (see W6).</td></tr>
+  <tr><td>BR-2 magnitude band</td><td>4.0–4.9, 5.0–5.9, 6.0+, lower bound included</td></tr>
+  <tr><td>BR-3 exposure</td><td>settlements, and the sum of their population, within 25 and 50 km of the epicentre. <code>PPLX</code> (city sections) and historical or abandoned places are excluded so nobody is counted twice.</td></tr>
+  <tr><td>BR-4 documented</td><td>matched to the Wikipedia list: date &plusmn;1 day, magnitude &plusmn;0.3; closest date, then closest magnitude</td></tr>
+  <tr><td>BR-5 depth class</td><td>shallow &lt; 70 km, intermediate 70–300 km, deep &gt; 300 km</td></tr>
+  <tr><td>BR-6 period</td><td>14 Nov 2016 (included) to 14 Nov 2026 (excluded), never after the run date</td></tr>
+</table>
+
+<h3>Data tests</h3>
+<p>27 tests run on every run (<code>src/quality/checks.py</code>). Each has a severity decided in advance:
+<b>stop</b> loads nothing and the warehouse keeps the last good data, <b>quarantine</b> sets the failing rows aside
+in the <code>quarantine</code> table with the test, the reason, the time and the whole record, <b>warn</b> loads
+and logs. Results are stored in <code>data_test_results</code> for every run.</p>
+<table class="small">
+  <tr><th>Severity</th><th>Tests</th><th>Result on 25 Nov 2026</th></tr>
+  <tr><td>quarantine</td><td>Q1 id and time not null · Q2 not deleted at the source · Q3 magnitude &ge; 4.0 (accepted range) · Q4 inside the box, depth -5 to 700 km (value range) · Q5 in the period, not after the run date · Q6 type is earthquake (accepted values) · Q7 not the same earthquake under two ids · P1 place coordinates valid · K1 Wikipedia magnitude readable</td>
+      <td><span class="fail">Q7: 1 row</span> (<code>us70009adb</code>, "probable duplicate of us70009ad8"); <span class="fail">K1: 6 rows</span>; the others pass</td></tr>
+  <tr><td>stop</td><td>S1 at least 1,000 valid earthquakes (row count) · S2 no more than 1% fewer than the warehouse holds · S3 event_id unique, not null · S4 place_id unique, not null · S5 row accounting · R1–R4 relationships fact &rarr; date, place, country, magnitude band · R5 fact &rarr; current version · R6 exposure &rarr; fact and place · R7 SQLite foreign key check</td>
+      <td><span class="pass">all pass</span>; the R-tests run inside the load transaction and roll it back if one fails</td></tr>
+  <tr><td>warn</td><td>W1 magnitude type accepted · W2 status reviewed or automatic · W3 &le; 10% farther than 100 km from a town · W4 &ge; 50 dated Wikipedia rows · W5 &le; 50% default depths · W6 no lost characters in place text</td>
+      <td><span class="fail">W5: 1,867 (68%)</span>, <span class="fail">W6: 298</span>; W3: 127 at sea (4.6%), passes</td></tr>
+</table>
+<p>S1 and S2 protect against the quiet failure of Week 1: an extraction that returns 12 rows without an error
+would otherwise replace good data. Q7 was not in our plan; we wrote it after profiling found the duplicate pair.
+Its rule (two ids within 2 s and 5 km) keeps the record with more information (higher significance). The
+nearest other pair is 13.7 s apart with magnitudes 4.3 and 4.7: two real earthquakes of the Sındırgı swarm, so the
+thresholds are tight on purpose.</p>
+<h3>Row counts</h3>
+<table>
+  <tr><th>Source</th><th class="n">Entered</th><th>Set aside, and why</th><th class="n">Used / loaded</th></tr>
+  <tr><td>USGS</td><td class="n">2,758 raw records</td><td>5 older versions (overlap) · 1 quarantined (Q7)</td><td class="n">2,752 earthquakes</td></tr>
+  <tr><td>GeoNames</td><td class="n">306,958 lines</td><td>75,239 not populated places · 165,854 far outside the region (cities1000) · 2,995 duplicates · 47,559 population unknown · 389 not settlements</td><td class="n">14,922 settlements</td></tr>
+  <tr><td>Wikipedia</td><td class="n">100 table rows</td><td>1 duplicate · 6 quarantined (K1) · 10 without a full date</td><td class="n">83 dated earthquakes</td></tr>
+</table>
+<p>Test S5 checks the USGS line on every run: 2,758 = 5 + 1 + 2,752.</p>
+
+<h2>6. Data model</h2>
+<figure><img src="../diagrams/star_schema.png" alt="Star schema">
+<figcaption>Figure 2. Star schema in SQLite (<code>src/load/schema.sql</code>). Crow's feet mark the "many" side.</figcaption></figure>
+<p><b>Grain of the fact table.</b> <code>fact_earthquake</code> has <b>one row per earthquake</b>, identified by its
+USGS event id, in its current version. That is the unit of the question ("how often, where"), and every measure
+is a property of one earthquake: magnitude, depth, distance to the nearest town, and the number of settlements and
+people within 25 and 50 km. Its keys point to <code>dim_date</code> (one row per day, <code>date_key</code> =
+yyyymmdd), <code>dim_place</code> (the nearest settlement, keyed by its GeoNames id), <code>dim_country</code>
+(BR-1) and <code>dim_magnitude_band</code> (BR-2).</p>
+<p>"Which towns are closest" is a question about pairs, not about earthquakes, so it has its own fact table,
+<code>fact_place_exposure</code>, with <b>one row per earthquake and settlement within 50 km</b> (151,611 rows).
+Putting the pairs in the main fact table would multiply each earthquake by its number of neighbours and break
+every count: the duplicate trap of Week 6. The town ranking is a <code>GROUP BY place_key</code> on this table.</p>
+<p><b>History (type 2).</b> <code>dim_event_version</code> keeps every version USGS published of an event, with
+<code>valid_from</code>, <code>valid_to</code> and <code>is_current</code>. A new row is added only when a tracked
+attribute changes (magnitude, magnitude type, status, location, depth, place text); the fact row points to the
+current version. It is built from the raw layer, which keeps every page we ever downloaded, so it can be rebuilt
+from scratch.</p>
+<p><b>Idempotent loading.</b> All keys are natural or deterministic (date_key, GeoNames id, USGS id, fixed keys for
+countries and bands), so the same data always gives the same rows. The load is one transaction: upsert the
+dimensions, upsert the facts (<code>INSERT ... ON CONFLICT DO UPDATE</code>), delete the rows whose key is no
+longer in the data (an event USGS deleted), run R1–R7, then commit or roll back.</p>
+
+<h2 class="pb">7. Results</h2>
+<figure><img src="../img/dashboard_town.png" alt="Dashboard">
+<figcaption>Figure 3. The dashboard (<code>python dashboard/app.py</code>) after a click on Çelikhan in the town
+ranking: its 50 km circle on the map and its 185 earthquakes in the table. Callback 1 updates the headline numbers,
+the yearly chart, the documented earthquakes and the ranking from the filters; callback 2 updates the map and the
+table from the filters and the selected town.</figcaption></figure>
+<div class="answer">
+<b>Answer.</b> Between 14 November 2016 and 14 November 2026, <b>1,463 earthquakes of magnitude 4 or more</b> struck
+Lebanon, Turkey and Cyprus under rule BR-1: <b>1,417 in Turkey</b> (120 of them M5+, 13 M6+), <b>41 in Cyprus</b>
+(6 M5+, strongest M6.6 west of Paphos on 11 January 2022) and <b>5 in Lebanon</b> (all below M4.5). That is about
+140 a year in Turkey, but not evenly: <b>640 in 2023</b>, almost all from the Kahramanmaraş sequence that began with
+the M7.8 and M7.5 of 6 February 2023 (452 M4+ earthquakes in Turkey in February 2023 alone). In the other full years,
+Turkey has between 49 (2018) and 143 (2020).
+</div>
+<table class="small">
+  <tr><th></th><th class="n">2016*</th><th class="n">2017</th><th class="n">2018</th><th class="n">2019</th><th class="n">2020</th><th class="n">2021</th><th class="n">2022</th><th class="n">2023</th><th class="n">2024</th><th class="n">2025</th><th class="n">2026*</th></tr>
+  <tr><td>Turkey</td><td class="n">4</td><td class="n">93</td><td class="n">49</td><td class="n">71</td><td class="n">143</td><td class="n">53</td><td class="n">79</td><td class="n">640</td><td class="n">97</td><td class="n">133</td><td class="n">55</td></tr>
+  <tr><td>Cyprus</td><td class="n">0</td><td class="n">4</td><td class="n">1</td><td class="n">1</td><td class="n">1</td><td class="n">2</td><td class="n">11</td><td class="n">2</td><td class="n">6</td><td class="n">13</td><td class="n">0</td></tr>
+  <tr><td>Lebanon</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">2</td><td class="n">0</td><td class="n">0</td><td class="n">3</td></tr>
+</table>
+<p class="small">* 2016 from 14 November, 2026 until 14 November.</p>
+<p><b>Where.</b> The map shows two belts: the East Anatolian Fault from Hatay to Malatya and Elazığ, and the Aegean
+coast with western Turkey (Izmir, Muğla, Balıkesir, the Sea of Marmara). 1,389 of Turkey's 1,417 earthquakes are
+shallow (but 68% of all depths are the 10 km default, so this class is rough). Lebanon's five are small: three offshore
+(nearest towns Sarafand and Beirut, 50 to 69 km away), one near Qâna in the south and one near Aïnâta in the
+north-east. Cyprus's cluster off Paphos.</p>
+<p><b>Which towns.</b> 1,427 of the 1,463 earthquakes had at least one settlement within 50 km, and 262 had a
+million people or more within 50 km. Among towns of 10,000 people or more, the most exposed are all near the 2023
+ruptures: Çelikhan (185 M4+ earthquakes within 50 km), Yeşilyurt (173), Göksun, Doğanşehir and Yakınca (171 each).
+Among cities of 100,000 or more: <b>Malatya (162)</b>, Adıyaman (118), Kahramanmaraş (107), Antakya (70), Samandağ
+and İskenderun (65). In Cyprus, Paphos (26) leads; in Lebanon, no town has more than three.</p>
+<p><b>Documented earthquakes.</b> The 16 Wikipedia earthquakes of the period are all in the warehouse. Three of
+them are not counted for Turkey by BR-1, although they hurt Turkey: the 2017 Bodrum–Kos and 2020 Aegean (Samos,
+117 deaths in Izmir) earthquakes are nearest to a Greek island, and one 2020 earthquake on the Iran–Turkey border
+is nearest to an Iranian village. Section 9 comes back to this.</p>
+
+<h2>8. Running and reliability</h2>
+<p><b>How to run.</b> From a fresh clone: create a virtual environment, <code>pip install -r requirements.txt</code>
+(every package pinned), copy <code>.env.example</code> to <code>.env</code>, then <code>python run_pipeline.py</code>
+and <code>python dashboard/app.py</code>. The README gives the exact commands; the snapshot workflow on GitHub
+Actions follows them on a clean machine.</p>
+<p><b>What the log shows.</b> Each run writes <code>logs/pipeline_&lt;run id&gt;.log</code> and the console: the
+mode (full, incremental, replay), every request problem, the staging counts, every join with its row counts, every
+test with its severity and result, the warehouse tables with their row counts and fingerprints, the watermark, and
+the row accounting. An extract of the incremental run:</p>
+<pre>INFO    run 20261125T130619Z | mode incremental | as of 2026-11-25
+INFO    usgs incremental: 5 event(s) updated after 2026-11-23T20:58:08 (watermark 2026-11-24T20:58:08.040000+00:00 minus 1 day overlap)
+INFO    join events -> nearest place (attributes)     2,752 rows in,   2,752 out, 0 without a match
+WARNING test Q7  quarantine FAIL not a duplicate of another event (same earthquake under two ids) | 1 row(s) quarantined
+WARNING test W5  warn       FAIL at most 50% of depths fixed at the 10 km default | 68% of depths are the USGS default: the depth classes are rough
+INFO    test S5  stop       PASS row accounting: raw = older versions + quarantined + loaded | 2,758 raw = 5 older versions + 1 quarantined + 2,752 loaded
+INFO    warehouse fact_earthquake         2,752 rows  sha256 e9feadb456a9d92d
+INFO    watermark moved to 2026-11-24T20:58:08.040000+00:00
+INFO    run 20261125T130619Z finished: success in 13 s, warehouse fingerprint b152f50bb04c8535</pre>
+<p class="small">(The timestamp and logger columns are cut here for width.)</p>
+<p><b>Proof that a re-run changes nothing.</b> <code>scripts/check_rerun.py</code> rebuilds the warehouse from the raw
+layer twice and compares a SHA-256 of every star table, rows sorted by key. On 25 November:</p>
+<table class="small">
+  <tr><th>Table</th><th class="n">Rows</th><th>Run 1</th><th>Run 2</th></tr>
+  <tr><td>dim_date</td><td class="n">3,663</td><td><code>130d646bea5eb5e6</code></td><td><code>130d646bea5eb5e6</code></td></tr>
+  <tr><td>dim_country</td><td class="n">21</td><td><code>db74eca8ecae33d0</code></td><td><code>db74eca8ecae33d0</code></td></tr>
+  <tr><td>dim_place</td><td class="n">14,922</td><td><code>2a609c89fbfd94fb</code></td><td><code>2a609c89fbfd94fb</code></td></tr>
+  <tr><td>dim_magnitude_band</td><td class="n">3</td><td><code>d317f964ea96fd90</code></td><td><code>d317f964ea96fd90</code></td></tr>
+  <tr><td>dim_event_version</td><td class="n">2,752</td><td><code>be21786036380a07</code></td><td><code>be21786036380a07</code></td></tr>
+  <tr><td>fact_earthquake</td><td class="n">2,752</td><td><code>e9feadb456a9d92d</code></td><td><code>e9feadb456a9d92d</code></td></tr>
+  <tr><td>fact_place_exposure</td><td class="n">151,611</td><td><code>cd0e966e97a59f8e</code></td><td><code>cd0e966e97a59f8e</code></td></tr>
+</table>
+<p>The four runs of that day (full, incremental, two replays) all ended with the same warehouse fingerprint,
+<code>b152f50bb04c8535</code>, and each added one row to <code>run_log</code> (run id, start, end, mode, status, rows
+extracted, staged, loaded and quarantined, failed tests, fingerprint). A unit test also loads the same data twice and
+compares the tables, and another checks that a revision updates the fact row and adds a version instead of a
+second earthquake.</p>
+<p><b>Scheduling and CI.</b> <code>.github/workflows/daily.yml</code> runs the pipeline every day at 03:17 UTC:
+it restores <code>data/</code> from the Actions cache, runs <code>python run_pipeline.py</code> (incremental), saves the
+cache, and writes the run log, the tests and the quarantine to the job summary. <code>.github/workflows/ci.yml</code>
+runs on every push: the 36 pytest tests (rules on their edges, staging steps, retries and paging without the network,
+the watermark overlap, the checkpoint, idempotent loading, the type 2 history, a rollback on an orphan row), then an
+end-to-end run, twice, on <code>tests/fixtures/raw</code>, a sample of 202 real earthquakes with the duplicate pair.</p>
+
+<h2>9. Limitations and next steps</h2>
+<ul>
+  <li><b>Nearest town is not "who felt it".</b> BR-1 gives the 2020 Samos earthquake (M7.0, 117 deaths in Izmir) to
+  Greece. The exposure table already counts the Turkish towns within 50 km of it; a next step is to show, for each
+  country, the earthquakes that hit its towns wherever the epicentre lies.</li>
+  <li><b>Aftershocks are counted one by one.</b> 2023 has 640 earthquakes in Turkey; a "how often" that does not want
+  one sequence to dominate needs declustering (grouping aftershocks with their main shock).</li>
+  <li><b>Populations.</b> 76% of the populated places of the region have no population in GeoNames, so exposure counts
+  only 14,922 settlements, and populations are of different years. A population grid (WorldPop or GHSL) would be
+  more even.</li>
+  <li><b>Magnitudes and depths.</b> <code>mb</code>, <code>mwr</code> and <code>mww</code> are mixed, and 68% of depths are
+  the default. USGS is complete for M4+ here, but the national networks (AFAD for Turkey, CNRS for Lebanon) record more
+  small events; adding one would be a fourth source.</li>
+  <li><b>Wikipedia covers Turkey only.</b> Lebanon and Cyprus have no comparable list; the documented flag is
+  therefore Turkish by construction.</li>
+  <li><b>Operations.</b> The daily run keeps its data in the GitHub Actions cache, which GitHub deletes after seven days
+  without use; if that happens, the next run is a full extraction (about 40 seconds), so nothing is lost, but the
+  type 2 history starts again. Moving <code>data/</code> to object storage would remove that limit.</li>
+</ul>
+
+<h2>10. Contributions and AI assistant disclosure</h2>
+<table>
+  <tr><th>Member</th><th>Main parts</th></tr>
+  <tr><td>Tala Mezher (202200920)</td><td>[to be completed by the team]</td></tr>
+  <tr><td>Sireen Hammoud (202206566)</td><td>[to be completed by the team]</td></tr>
+</table>
+<p><b>AI assistant.</b> We used Claude (Anthropic) throughout the project. It wrote the first version of the code
+(extractors, staging, tests, warehouse, dashboard, workflows), the diagrams and the first draft of this report, from
+our proposal and the course slides. [The team completes here what we checked and changed in its output, for
+example: which numbers we re-checked against the warehouse, which decisions we made or changed, which parts we
+rewrote.] We can explain every line of the code, and we are responsible for its correctness.</p>
+
+</body>
+</html>

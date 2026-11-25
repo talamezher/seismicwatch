@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SeismicWatch slides</title>
+<style>
+  @page { size: 13.333in 7.5in; margin: 0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Helvetica Neue", Arial, sans-serif; color: #1d2733; }
+  .s { width: 13.333in; height: 7.5in; padding: 0.55in 0.7in 0.5in; position: relative; break-after: page; overflow: hidden;
+       background: #ffffff; }
+  .s h2 { font-size: 30pt; margin: 0 0 0.25in; letter-spacing: 0.2px; }
+  .s h2 small { display: block; font-size: 14pt; font-weight: 400; color: #5b6774; margin-top: 4px; }
+  .s p, .s li { font-size: 17pt; line-height: 1.35; }
+  .s ul { margin: 0.05in 0 0; padding-left: 0.32in; }
+  .s li { margin-bottom: 0.09in; }
+  .bar { position: absolute; left: 0; top: 0; width: 0.18in; height: 100%; background: #c0392b; }
+  .foot { position: absolute; left: 0.7in; right: 0.7in; bottom: 0.22in; font-size: 10.5pt; color: #8a95a1;
+          display: flex; justify-content: space-between; }
+  .who { color: #1f6f8b; font-weight: 600; }
+  .title { background: #1d2733; color: #fff; }
+  .title .bar { background: #c0392b; width: 0.35in; }
+  .title h1 { font-size: 58pt; margin: 1.35in 0 0.15in; letter-spacing: 0.5px; }
+  .title p { font-size: 20pt; color: #dfe5ea; margin: 0 0 0.1in; }
+  .title .names { margin-top: 0.6in; font-size: 16pt; color: #c9d1d9; line-height: 1.5; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45in; align-items: start; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.3in; }
+  .card { border: 1px solid #dbe1e7; border-radius: 8px; padding: 0.2in 0.25in; background: #fafbfc; }
+  .card h3 { margin: 0 0 0.08in; font-size: 17pt; }
+  .card p, .card li { font-size: 14pt; margin: 0 0 0.05in; }
+  .big { font-size: 46pt; font-weight: 700; color: #c0392b; line-height: 1; }
+  .k { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.25in; margin-bottom: 0.3in; }
+  .k div { border-left: 4px solid #c0392b; padding-left: 0.15in; }
+  .k b { display: block; font-size: 34pt; }
+  .k span { font-size: 13pt; color: #5b6774; }
+  table { border-collapse: collapse; width: 100%; font-size: 14pt; }
+  th, td { border-bottom: 1px solid #dbe1e7; padding: 6px 9px; text-align: left; }
+  th { background: #eef2f5; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  img.full { width: 100%; }
+  code, pre { font-family: Menlo, Consolas, monospace; }
+  pre { font-size: 11.5pt; background: #1d2733; color: #e8edf1; padding: 0.18in 0.22in; border-radius: 6px; line-height: 1.45;
+        white-space: pre-wrap; margin: 0.1in 0; }
+  .hl { color: #f5b041; }
+  .tag { display: inline-block; font-size: 11pt; padding: 2px 8px; border-radius: 10px; color: #fff; margin-right: 4px; }
+  .stop { background: #b03a2e; } .q { background: #d68910; } .warn { background: #1f6f8b; }
+</style>
+</head>
+<body>
+
+<!-- 1 -->
+<section class="s title"><div class="bar"></div>
+  <h1>SeismicWatch</h1>
+  <p>M4+ earthquakes around Lebanon, Turkey and Cyprus:<br>how often, where, and which towns are closest</p>
+  <div class="names">Tala Mezher (202200920) · Sireen Hammoud (202206566)<br>
+  DSC 620 Data Engineering · Dr. Ahmad Audi · LAU, Fall 2026<br>github.com/talamezher/seismicwatch</div>
+</section>
+
+<!-- 2 -->
+<section class="s"><div class="bar"></div>
+  <h2>The question<small>and who it is for</small></h2>
+  <div class="grid2">
+    <div>
+      <p style="font-size:24pt;line-height:1.35"><b>How often</b> do earthquakes of magnitude 4 or more occur around
+      Lebanon, Turkey and Cyprus, <b>where</b>, and <b>which populated places</b> are closest to them?</p>
+      <p style="color:#5b6774">Ten years: 14 Nov 2016 to 14 Nov 2026. The pipeline keeps running after that.</p>
+    </div>
+    <div class="card"><h3>Users</h3><ul>
+      <li>civil-protection and municipal planners: which towns are hit most often</li>
+      <li>insurers: exposure by area</li>
+      <li>journalists and residents: a checked number, not a headline</li></ul>
+      <h3 style="margin-top:0.15in">They need</h3><ul>
+      <li>counts per country and per year</li><li>a map</li><li>a ranking of towns within 25 or 50 km</li></ul></div>
+  </div>
+  <div class="foot"><span class="who">Tala</span><span>2</span></div>
+</section>
+
+<!-- 3 -->
+<section class="s"><div class="bar"></div>
+  <h2>Three sources, three types</h2>
+  <table>
+    <tr><th>Source</th><th>Type</th><th class="n">This run</th><th>Updates</th><th>Terms</th></tr>
+    <tr><td><b>USGS earthquake catalogue</b></td><td>API, GeoJSON, paged</td><td class="n">2,753 events · 11 pages</td><td>minutes; revised later</td><td>public domain</td></tr>
+    <tr><td><b>GeoNames</b> LB, TR, CY, cities1000</td><td>files, zipped TSV, UTF-8</td><td class="n">306,958 lines · 16 MB</td><td>daily</td><td>CC BY 4.0</td></tr>
+    <tr><td><b>Wikipedia</b> List of earthquakes in Turkey</td><td>web page, HTML tables</td><td class="n">3 tables · 100 rows</td><td>irregular</td><td>CC BY-SA 4.0, robots.txt allows</td></tr>
+  </table>
+  <div class="grid3" style="margin-top:0.3in">
+    <div class="card"><h3>USGS gives</h3><p>when, where, how strong, how deep, and every revision</p></div>
+    <div class="card"><h3>GeoNames gives</h3><p>every town and village, with coordinates and population, so we can measure distance</p></div>
+    <div class="card"><h3>Wikipedia gives</h3><p>which earthquakes were deadly: our check that the big ones are all there</p></div>
+  </div>
+  <div class="foot"><span class="who">Tala</span><span>3</span></div>
+</section>
+
+<!-- 4 -->
+<section class="s"><div class="bar"></div>
+  <h2>Architecture<small>raw, staging, warehouse, dashboard · one command: <code>python run_pipeline.py</code></small></h2>
+  <img class="full" src="../diagrams/architecture.png" style="max-height:5.3in;object-fit:contain">
+  <div class="foot"><span class="who">Sireen</span><span>4</span></div>
+</section>
+
+<!-- 5 -->
+<section class="s"><div class="bar"></div>
+  <h2>Extraction<small>code-driven, polite, and safe to re-run</small></h2>
+  <div class="grid2">
+    <div><ul>
+      <li><b>One polite client</b>: User-Agent with contact, 60 s timeout, 1 s between requests</li>
+      <li><b>429 / 5xx</b>: retry with backoff; <b>other 4xx</b>: our bug, never retried</li>
+      <li><b>Raw first</b>: every answer saved untouched + manifest (URL, time, records, SHA-256)</li>
+      <li><b>USGS full</b>: year windows, <code>/count</code> then <code>limit</code>/<code>offset</code>, checkpoint</li>
+      <li><b>GeoNames</b>: If-Modified-Since · <b>Wikipedia</b>: robots.txt first</li></ul></div>
+    <div><h3 style="font-size:18pt;margin:0 0 0.05in">Incremental: watermark + 1-day overlap</h3>
+<pre>usgs incremental: <span class="hl">5 event(s)</span> updated after 2026-11-23T20:58:08
+  (watermark 2026-11-24T20:58:08 minus 1 day overlap)
+ROWS raw USGS records 2,758 -> older versions <span class="hl">5</span>
+     -> quarantined 1 -> loaded 2,752</pre>
+      <ul><li>revised events <b>replace</b> their row, never appended</li>
+      <li>watermark saved <b>only after</b> a successful load</li>
+      <li>asks M&ge;3.5, to see events revised below 4.0</li></ul></div>
+  </div>
+  <div class="foot"><span class="who">Sireen</span><span>5</span></div>
+</section>
+
+<!-- 6 -->
+<section class="s"><div class="bar"></div>
+  <h2>Profiling first, then one staging table per source</h2>
+  <div class="grid3">
+    <div class="card"><h3>USGS</h3><ul><li>all reviewed, 3 magnitude types</li><li><b>68%</b> of depths = 10 km default</li>
+      <li><b>298</b> place texts lost letters at the source: "Marmara Ere?lisi"</li></ul></div>
+    <div class="card"><h3>GeoNames</h3><ul><li>population <b>0 = unknown</b> (76% of places)</li><li>dem <b>-9999</b> = no data</li>
+      <li><b>2,995</b> towns in two files</li><li>PPLX = city districts: would count people twice</li></ul></div>
+    <div class="card"><h3>Wikipedia</h3><ul><li>"7.8 Mw", "6.6–6.9", footnotes</li><li>"50,783" deaths as text</li>
+      <li>16 rows without a full date</li></ul></div>
+  </div>
+  <p style="margin-top:0.3in">Every staging table: <b>1</b> rename · <b>2</b> cast · <b>3</b> standardize ·
+  <b>4</b> placeholders &rarr; missing · <b>5</b> newest version / duplicates · <b>6</b> flag invalid rows (never delete)</p>
+  <div class="foot"><span class="who">Tala</span><span>6</span></div>
+</section>
+
+<!-- 7 -->
+<section class="s"><div class="bar"></div>
+  <h2>A problem we found: one earthquake, two ids<small>and how we solved it</small></h2>
+  <div class="grid2">
+    <div>
+      <table>
+        <tr><th></th><th>us70009ad8</th><th>us70009adb</th></tr>
+        <tr><td>time</td><td colspan="2" style="text-align:center">0.1 s apart</td></tr>
+        <tr><td>epicentre</td><td colspan="2" style="text-align:center">1.3 km apart</td></tr>
+        <tr><td>place</td><td colspan="2" style="text-align:center">98 km S of Néa Anatolí, Greece</td></tr>
+        <tr><td>magnitude</td><td>4.6</td><td>4.5</td></tr>
+        <tr><td>significance</td><td>326</td><td>312</td></tr>
+      </table>
+      <p style="margin-top:0.2in">Key unique, no error, yet the same earthquake is counted twice:
+      <b>two keys, one real thing</b>.</p>
+    </div>
+    <div class="card"><h3>Our fix: test Q7 (quarantine)</h3><ul>
+      <li>two ids within <b>2 s</b> and <b>5 km</b> = the same earthquake</li>
+      <li>keep the one with more information (higher significance)</li>
+      <li>the other goes to <code>quarantine</code>: "probable duplicate of us70009ad8"</li>
+      <li>thresholds tight on purpose: the next pair is 13.7 s apart, M4.3 and M4.7, two real shocks</li>
+      <li>a unit test and the CI sample keep the real pair</li></ul></div>
+  </div>
+  <div class="foot"><span class="who">Sireen</span><span>7</span></div>
+</section>
+
+<!-- 8 -->
+<section class="s"><div class="bar"></div>
+  <h2>Joins and business rules<small>every join: left join, <code>validate=</code>, row count before and after</small></h2>
+  <div class="grid2">
+    <table>
+      <tr><th>Join</th><th class="n">In</th><th class="n">Out</th></tr>
+      <tr><td>earthquake &rarr; nearest town</td><td class="n">2,752</td><td class="n">2,752</td></tr>
+      <tr><td>earthquake &rarr; Wikipedia list</td><td class="n">2,752</td><td class="n">2,752</td></tr>
+      <tr><td>earthquake &times; towns within 50 km &rarr; town</td><td class="n">151,611</td><td class="n">151,611</td></tr>
+    </table>
+    <ul style="margin-top:0">
+      <li><b>BR-1</b> country = country of the nearest town, if &le; 100 km</li>
+      <li><b>BR-2</b> bands 4.0–4.9, 5.0–5.9, 6.0+</li>
+      <li><b>BR-3</b> exposure = towns and people within 25 / 50 km</li>
+      <li><b>BR-4</b> on Wikipedia: &plusmn;1 day, &plusmn;0.3 magnitude</li>
+      <li><b>BR-5</b> depth class · <b>BR-6</b> study period</li>
+      <li>the run date is passed in: no rule reads the clock</li></ul>
+  </div>
+  <p style="margin-top:0.25in">All <b>16</b> Wikipedia earthquakes of the period matched. The &plusmn;1 day mattered: Bodrum,
+  21 July 2017 local time, is 20 July 22:31 UTC.</p>
+  <div class="foot"><span class="who">Tala</span><span>8</span></div>
+</section>
+
+<!-- 9 -->
+<section class="s"><div class="bar"></div>
+  <h2>27 data tests on every run</h2>
+  <div class="grid3">
+    <div class="card"><h3><span class="tag stop">stop</span> 12 tests</h3><p>load nothing</p><ul>
+      <li>&ge; 1,000 earthquakes; no more than 1% fewer than last time</li><li>unique, not-null keys</li>
+      <li>row accounting</li><li><b>relationships</b> R1–R7 inside the load transaction</li></ul></div>
+    <div class="card"><h3><span class="tag q">quarantine</span> 9 tests</h3><p>set aside, with the reason</p><ul>
+      <li>ranges, accepted values, period</li><li>Q7 duplicate ids: <b>1 row</b></li><li>K1 unreadable magnitude: <b>6 rows</b></li></ul></div>
+    <div class="card"><h3><span class="tag warn">warn</span> 6 tests</h3><p>load, log it</p><ul>
+      <li>W5 default depths: <b>68%</b></li><li>W6 lost characters: <b>298</b></li><li>W3 at sea: 127 (4.6%)</li></ul></div>
+  </div>
+  <p style="margin-top:0.3in;font-size:21pt;text-align:center"><b>2,758</b> raw records = <b>5</b> older versions + <b>1</b> quarantined + <b>2,752</b> loaded</p>
+  <div class="foot"><span class="who">Sireen</span><span>9</span></div>
+</section>
+
+<!-- 10 -->
+<section class="s"><div class="bar"></div>
+  <h2>Star schema<small>grain: one row per earthquake (USGS event id)</small></h2>
+  <div class="grid2" style="grid-template-columns:1.55fr 1fr">
+    <img class="full" src="../diagrams/star_schema.png">
+    <ul style="margin-top:0">
+      <li><code>fact_earthquake</code>: 2,752 rows</li>
+      <li><code>fact_place_exposure</code>: one row per earthquake and town within 50 km, 151,611 rows; kept apart to avoid the duplicate trap</li>
+      <li>dimensions: date, place, country, magnitude band</li>
+      <li><code>dim_event_version</code>: <b>type 2</b>, every USGS revision (valid_from, valid_to, is_current)</li>
+      <li>SQLite, one transaction, upsert on natural keys</li></ul>
+  </div>
+  <div class="foot"><span class="who">Tala</span><span>10</span></div>
+</section>
+
+<!-- 11 -->
+<section class="s"><div class="bar"></div>
+  <h2>Live demonstration</h2>
+<pre style="font-size:15pt">$ python run_pipeline.py              <span class="hl"># incremental run: extract, stage, test, load, log</span>
+$ python scripts/run_report.py        <span class="hl"># run_log, test results, quarantine, joins</span>
+$ python scripts/check_rerun.py       <span class="hl"># rebuild twice: same fingerprints</span>
+$ python dashboard/app.py             <span class="hl"># http://127.0.0.1:8050</span></pre>
+  <div class="grid3" style="margin-top:0.25in">
+    <div class="card"><h3>Watch for</h3><p>the watermark and overlap, the join counts, the test results, the row accounting</p></div>
+    <div class="card"><h3>Then</h3><p>the quarantine table: why each row was set aside</p></div>
+    <div class="card"><h3>Backup</h3><p>if the network fails: <code>--skip-extract</code> rebuilds from the raw layer</p></div>
+  </div>
+  <div class="foot"><span class="who">Sireen</span><span>11</span></div>
+</section>
+
+<!-- 12 -->
+<section class="s"><div class="bar"></div>
+  <h2>The answer: how often<small>14 Nov 2016 to 14 Nov 2026, M4+, country by BR-1</small></h2>
+  <div class="k"><div><b>1,417</b><span>Turkey · 120 M5+ · 13 M6+</span></div><div><b>41</b><span>Cyprus · strongest M6.6, off Paphos, 2022</span></div>
+    <div><b>5</b><span>Lebanon · all below M4.5</span></div><div><b>640</b><span>Turkey in 2023 alone (Kahramanmaraş)</span></div></div>
+  <img src="per_year.png" style="height:4.0in">
+  <div class="foot"><span class="who">Tala</span><span>12 · * partial years</span></div>
+</section>
+
+<!-- 13 -->
+<section class="s"><div class="bar"></div>
+  <h2>The answer: where, and which towns</h2>
+  <div class="grid2">
+    <img class="full" src="top_cities.png">
+    <ul style="margin-top:0">
+      <li>two belts: the <b>East Anatolian Fault</b> (Hatay to Malatya) and the <b>Aegean coast</b></li>
+      <li>towns of 10,000+: <b>Çelikhan 185</b>, Yeşilyurt 173, Göksun 171</li>
+      <li>cities of 100,000+: <b>Malatya 162</b>, Adıyaman 118, Kahramanmaraş 107</li>
+      <li>1,427 of 1,463 earthquakes had a town within 50 km; 262 had a million people within 50 km</li>
+      <li>Cyprus: Paphos 26 · Lebanon: no town above 3</li></ul>
+  </div>
+  <div class="foot"><span class="who">Sireen</span><span>13</span></div>
+</section>
+
+<!-- 14 -->
+<section class="s"><div class="bar"></div>
+  <h2>The dashboard<small>3 charts and 2 tables · callbacks: filters &rarr; summary; filters + clicked town &rarr; map and events</small></h2>
+  <img src="../img/dashboard_town.png" style="width:100%;height:5.25in;object-fit:cover;object-position:top;border:1px solid #dbe1e7">
+  <div class="foot"><span class="who">Sireen</span><span>14</span></div>
+</section>
+
+<!-- 15 -->
+<section class="s"><div class="bar"></div>
+  <h2>Running it every day</h2>
+  <div class="grid2">
+    <div><ul>
+      <li><b>One command</b>, a log file per run, a <code>run_log</code> row per run</li>
+      <li><b>Re-run proof</b>: 4 runs, same fingerprint <code>b152f50bb04c8535</code></li>
+      <li><b>Scheduling</b>: GitHub Actions, every day 03:17 UTC, data kept in the Actions cache</li>
+      <li><b>CI</b>: 36 pytest tests + an end-to-end run on 202 real earthquakes, twice, on every push</li>
+      <li><b>History</b> (bonus): type 2 versions of each event</li></ul></div>
+    <table>
+      <tr><th>Table</th><th class="n">Rows</th><th>Run 1 = Run 2</th></tr>
+      <tr><td>fact_earthquake</td><td class="n">2,752</td><td><code>e9feadb4…</code></td></tr>
+      <tr><td>fact_place_exposure</td><td class="n">151,611</td><td><code>cd0e966e…</code></td></tr>
+      <tr><td>dim_place</td><td class="n">14,922</td><td><code>2a609c89…</code></td></tr>
+      <tr><td>dim_event_version</td><td class="n">2,752</td><td><code>be217860…</code></td></tr>
+      <tr><td>dim_date</td><td class="n">3,663</td><td><code>130d646b…</code></td></tr>
+    </table>
+  </div>
+  <div class="foot"><span class="who">Tala</span><span>15</span></div>
+</section>
+
+<!-- 16 -->
+<section class="s"><div class="bar"></div>
+  <h2>Limitations and next steps</h2>
+  <ul>
+    <li><b>Nearest town &ne; who felt it</b>: BR-1 gives the 2020 Samos M7.0 (117 deaths in Izmir) to Greece</li>
+    <li><b>Aftershocks counted one by one</b>: decluster before comparing years</li>
+    <li><b>76% of places have no population</b>: a population grid (WorldPop, GHSL) would be fairer</li>
+    <li><b>Mixed magnitude types, default depths</b>: add a national catalogue (AFAD, CNRS Lebanon)</li>
+    <li><b>Wikipedia covers Turkey only</b> · the Actions cache expires after 7 idle days</li>
+  </ul>
+  <div class="foot"><span class="who">Sireen</span><span>16</span></div>
+</section>
+
+<!-- 17 -->
+<section class="s title"><div class="bar"></div>
+  <h1 style="margin-top:1.6in">Thank you</h1>
+  <p>Questions?</p>
+  <div class="names">github.com/talamezher/seismicwatch<br>
+  Data: USGS (public domain) · GeoNames (CC BY 4.0) · Wikipedia (CC BY-SA 4.0)</div>
+</section>
+
+</body>
+</html>
