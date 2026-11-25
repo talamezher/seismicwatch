@@ -70,7 +70,38 @@ EVENT_ROW_TESTS = [
      | (df["event_time_utc"] > _utc(d) + pd.Timedelta(days=1))),
     ("Q6", "event type is earthquake", "not an earthquake",
      lambda df, d: df["event_type"].fillna("earthquake") != "earthquake"),
+    ("Q7", "not a duplicate of another event (same earthquake under two ids)", "probable duplicate",
+     lambda df, d: df["duplicate_of"].notna()),
 ]
+
+DUPLICATE_SECONDS = 2.0     # two ids closer than this in time...
+DUPLICATE_KM = 5.0          # ...and in space are one earthquake recorded twice
+
+
+def probable_duplicates(df: pd.DataFrame) -> pd.Series:
+    """For each event, the id of another event it duplicates (or NA).
+
+    Two USGS ids whose origin times are at most 2 s apart and whose epicentres are at
+    most 5 km apart are the same earthquake recorded twice (two keys, one entity).
+    The record with the higher significance (more stations, more information) is kept;
+    on a tie, the smaller id is kept, so the choice never depends on row order."""
+    from src.transform.geo import haversine_km
+    e = df[["event_id", "event_time_utc", "latitude", "longitude", "significance"]].dropna(
+        subset=["event_time_utc", "latitude", "longitude"]).sort_values("event_time_utc")
+    t = e["event_time_utc"].astype("int64").to_numpy() / 1e9
+    ids, lat, lon = e["event_id"].to_numpy(), e["latitude"].to_numpy(), e["longitude"].to_numpy()
+    sig = e["significance"].fillna(0).to_numpy()
+    out = {}
+    for i in range(len(e)):
+        j = i + 1
+        while j < len(e) and t[j] - t[i] <= DUPLICATE_SECONDS:
+            if haversine_km(lat[i], lon[i], lat[j], lon[j]) <= DUPLICATE_KM:
+                keep_i = sig[i] > sig[j] or (sig[i] == sig[j] and str(ids[i]) < str(ids[j]))
+                drop, keep = (ids[j], ids[i]) if keep_i else (ids[i], ids[j])
+                out.setdefault(drop, keep)
+            j += 1
+    return df["event_id"].map(out).astype("string")
+
 
 
 def flag_events(df: pd.DataFrame, run_date) -> pd.DataFrame:
@@ -82,6 +113,8 @@ def flag_events(df: pd.DataFrame, run_date) -> pd.DataFrame:
         if tid == "Q6":
             detail = "not an earthquake (" + df["event_type"].fillna("?") + ")"
             reason = reason.mask(mask, detail)
+        elif tid == "Q7":
+            reason = reason.mask(mask, "probable duplicate of " + df["duplicate_of"].fillna(""))
         else:
             reason = reason.mask(mask, text)
         test = test.mask(mask, tid)
@@ -139,6 +172,14 @@ def table_tests(events_clean: pd.DataFrame, places: pd.DataFrame, wiki: pd.DataF
         share = far / max(len(nearest_distance), 1)
         r.append(TestResult("W3", "at most 10% of earthquakes farther than 100 km from any town", WARN,
                             "events_enriched", far, share <= 0.10, f"{far} ({share:.1%}) at sea or remote"))
+    default_depth = float(events_clean["depth_is_default"].mean()) if n else 0.0
+    r.append(TestResult("W5", "at most 50% of depths fixed at the 10 km default", WARN, "stg_events",
+                        int(events_clean["depth_is_default"].sum()), default_depth <= 0.5,
+                        f"{default_depth:.0%} of depths are the USGS default: the depth classes are rough"))
+    damaged = int(events_clean["place_text"].str.contains("?", regex=False, na=False).sum())
+    r.append(TestResult("W6", "USGS place text without lost characters ('?')", WARN, "stg_events", damaged,
+                        damaged == 0, f"{damaged} place texts lost their accented letters at the source; "
+                        "the country comes from GeoNames, not from this text"))
     valid_wiki = int(wiki["is_valid"].sum()) if len(wiki) else 0
     r.append(TestResult("W4", "at least 50 dated historical earthquakes read from Wikipedia", WARN,
                         "stg_wiki_quakes", 0 if valid_wiki >= 50 else 50 - valid_wiki, valid_wiki >= 50,

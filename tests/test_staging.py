@@ -18,16 +18,17 @@ def _raw(features):
 def test_newest_version_of_a_revised_event_is_kept(make_feature, run_date):
     raw = _raw([make_feature("us1", mag=4.6, updated_ms=1_600_100_000_000),
                 make_feature("us1", mag=4.9, updated_ms=1_700_000_000_000),   # revised later
-                make_feature("us2", mag=5.1)])
+                make_feature("us2", mag=5.1, time_ms=1_600_000_500_000)])
     events, acc = staging.stg_events(raw, run_date)
     assert len(events) == 2 and acc["older_versions_removed"] == 1
     assert events.set_index("event_id").loc["us1", "magnitude"] == 4.9
 
 
 def test_invalid_events_are_flagged_not_deleted(make_feature, run_date):
-    raw = _raw([make_feature("ok"), make_feature("blast", etype="quarry blast"),
-                make_feature("small", mag=3.8), make_feature("away", lat=10.0),
-                make_feature("gone", status="deleted")])
+    raw = _raw([make_feature("ok"), make_feature("blast", etype="quarry blast", time_ms=1_600_000_100_000),
+                make_feature("small", mag=3.8, time_ms=1_600_000_200_000),
+                make_feature("away", lat=10.0, time_ms=1_600_000_300_000),
+                make_feature("gone", status="deleted", time_ms=1_600_000_400_000)])
     events, _ = staging.stg_events(raw, run_date)
     assert len(events) == 5                                   # nothing deleted in staging
     reasons = events.set_index("event_id")["failed_test"].to_dict()
@@ -37,7 +38,8 @@ def test_invalid_events_are_flagged_not_deleted(make_feature, run_date):
 
 
 def test_default_depth_is_marked(make_feature, run_date):
-    events, _ = staging.stg_events(_raw([make_feature("a", depth=10.0), make_feature("b", depth=12.5)]), run_date)
+    events, _ = staging.stg_events(_raw([make_feature("a", depth=10.0),
+                                         make_feature("b", depth=12.5, time_ms=1_600_000_900_000)]), run_date)
     assert events.set_index("event_id")["depth_is_default"].to_dict() == {"a": True, "b": False}
 
 
@@ -80,3 +82,15 @@ def test_wikipedia_parsers():
     assert pd.isna(staging.parse_count("Unknown"))
     assert staging.parse_date("6 February 2023") == pd.Timestamp("2023-02-06")
     assert pd.isna(staging.parse_date("c. 1500"))
+
+
+def test_same_earthquake_under_two_ids_is_quarantined(make_feature, run_date):
+    a = make_feature("us70009ad8", mag=4.6, time_ms=1_570_000_000_000, lat=35.10, lon=26.00)
+    b = make_feature("us70009adb", mag=4.5, time_ms=1_570_000_000_100, lat=35.11, lon=26.01)   # 0.1 s, ~1.4 km
+    c = make_feature("other", mag=4.4, time_ms=1_570_000_013_000, lat=35.10, lon=26.00)        # 13 s later: a real aftershock
+    a["properties"]["sig"], b["properties"]["sig"] = 326, 312
+    events, _ = staging.stg_events(_raw([a, b, c]), run_date)
+    e = events.set_index("event_id")
+    assert e.loc["us70009adb", "failed_test"] == "Q7"
+    assert e.loc["us70009adb", "invalid_reason"] == "probable duplicate of us70009ad8"
+    assert e.loc["us70009ad8", "is_valid"] and e.loc["other", "is_valid"]

@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from src import config
-from src.quality.checks import flag_events
+from src.quality.checks import flag_events, probable_duplicates
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ def read_usgs_raw(files) -> pd.DataFrame:
         df["latitude"] = coords.str[1]
         df["depth_km"] = coords.str[2]
         df["raw_file"] = f"{Path(f).parent.name}/{Path(f).name}"
-        frames.append(df)
+        frames.append(df.dropna(axis=1, how="all"))     # optional fields absent from a page come back later
     if not frames:
         return pd.DataFrame(columns=["id"])
     return pd.concat(frames, ignore_index=True)
@@ -117,6 +117,8 @@ def stg_events(raw: pd.DataFrame, run_date: pd.Timestamp):
     before = len(df)
     df = df.drop_duplicates(subset=["event_id"], keep="last").reset_index(drop=True)
     acc["older_versions_removed"] = before - len(df)
+    # the same earthquake under two ids (found by profiling): marked here, quarantined by test Q7
+    df["duplicate_of"] = probable_duplicates(df)
     # 6. flag invalid rows with the Q-tests of src/quality/checks.py; never delete them here
     df = flag_events(df, run_date)
     acc["staged_events"] = len(df)
@@ -307,9 +309,10 @@ def stg_wiki_quakes(pages):
     })
     # a row with only a year cannot be matched to a day; keep the year for the report
     df["year"] = df["quake_date"].dt.year.astype("Int64")
-    no_date = df["year"].isna() & raw["year_raw"].notna()
-    df.loc[no_date, "year"] = pd.to_numeric(raw.loc[no_date, "year_raw"].astype("string").str.extract(r"(\d{3,4})")[0],
-                                            errors="coerce").astype("Int64")
+    for col in ["year_raw", "date_raw"]:
+        no_year = df["year"].isna() & raw[col].notna()
+        found = raw.loc[no_year, col].astype("string").str.extract(r"\b(\d{2,4})\b")[0]
+        df.loc[no_year, "year"] = pd.to_numeric(found, errors="coerce").astype("Int64")
     # 3. standardize: one spacing, no footnote marks
     df["place"] = df["place"].str.replace(r"\s+", " ", regex=True)
     # 4. placeholders: '–', '?', 'Unknown' already became NaN in the parsers
@@ -320,8 +323,8 @@ def stg_wiki_quakes(pages):
     acc["duplicates_removed"] = before - len(df)
     # 6. flag
     reason = pd.Series(pd.NA, index=df.index, dtype="string")
-    reason = reason.mask(df["magnitude"].isna(), "magnitude not readable")
     reason = reason.mask(df["quake_date"].isna(), "no full date (cannot be matched to an event)")
+    reason = reason.mask(df["magnitude"].isna(), "magnitude not readable")     # checked last: wins
     df["invalid_reason"] = reason
     df["is_valid"] = reason.isna()
     df.insert(0, "wiki_id", range(1, len(df) + 1))
