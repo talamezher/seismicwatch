@@ -6,7 +6,7 @@ name: Snapshot run
 # logs and the warehouse to the branch pipeline-snapshot for the report.
 on:
   push:
-    paths: [".github/workflows/snapshot.yml", "src/**", "run_pipeline.py"]
+    paths: [".github/workflows/snapshot.yml"]
   workflow_dispatch:
 
 permissions:

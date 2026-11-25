@@ -59,11 +59,23 @@ def events_near_place(conn, place_key, mag_range, date_range, radius_km=50):
     if radius_km == 25:
         clauses.append("x.within_25km = 1")
     sql = f"""
-        SELECT f.event_id, substr(f.event_time_utc, 1, 16) AS time_utc, f.magnitude, f.depth_km,
-               x.distance_km, f.usgs_place_text, f.is_documented, f.wiki_deaths
+        SELECT f.event_id, replace(substr(f.event_time_utc, 1, 16), 'T', ' ') AS time_utc, f.magnitude,
+               round(f.depth_km, 1) AS depth_km, round(x.distance_km, 1) AS distance_km,
+               p.place_name AS epicentre_town, f.is_documented, f.wiki_deaths
         FROM fact_place_exposure x JOIN fact_earthquake f USING (event_id)
+        JOIN dim_place p ON p.place_key = f.place_key
         WHERE {' AND '.join(clauses)}
         ORDER BY f.magnitude DESC, f.event_time_utc"""
+    return pd.read_sql(sql, conn, params=params)
+
+
+def documented(conn, countries, mag_range, date_range):
+    """Earthquakes matched to the Wikipedia list (business rule BR-4)."""
+    clauses, params = _where(countries, mag_range, date_range)
+    clauses += ["is_documented = 1", f"country_code IN ({','.join('?' * len(countries))})"]
+    params += list(countries)
+    sql = f"""SELECT full_date AS date_utc, magnitude, nearest_place, country_code, wiki_place, wiki_deaths
+              FROM v_earthquakes WHERE {' AND '.join(clauses)} ORDER BY event_time_utc"""
     return pd.read_sql(sql, conn, params=params)
 
 

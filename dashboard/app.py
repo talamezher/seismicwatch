@@ -95,7 +95,21 @@ def create_app(db_path=None):
                 dcc.Graph(id="map", config=GRAPH_CONFIG)]),
             html.Div(className="card", children=[
                 html.H3("Earthquakes per year"),
-                dcc.Graph(id="per-year", config=GRAPH_CONFIG)]),
+                dcc.Graph(id="per-year", config=GRAPH_CONFIG),
+                html.H3("Documented major earthquakes", style={"marginTop": "6px"}),
+                html.P("USGS events matched to Wikipedia's list (same day +/- 1, magnitude +/- 0.3).",
+                       className="hint"),
+                dash_table.DataTable(id="documented", page_size=6, style_table={"overflowX": "auto"},
+                                     columns=[{"name": "Date (UTC)", "id": "date_utc"},
+                                              {"name": "Mag.", "id": "magnitude"},
+                                              {"name": "Nearest town", "id": "nearest_place"},
+                                              {"name": "Wikipedia", "id": "wiki_place"},
+                                              {"name": "Deaths", "id": "wiki_deaths"}],
+                                     style_cell={"fontFamily": "Segoe UI, Helvetica, Arial, sans-serif",
+                                                 "fontSize": 12.5, "padding": "3px", "maxWidth": 160,
+                                                 "overflow": "hidden", "textOverflow": "ellipsis"},
+                                     style_header={"fontWeight": 600}),
+            ]),
         ]),
         html.Div(className="row", children=[
             html.Div(className="card", children=[
@@ -120,18 +134,20 @@ def create_app(db_path=None):
 
     # ---- callback 1: filters -> headline numbers, yearly chart, town ranking ------------------------
     @app.callback(Output("kpis", "children"), Output("per-year", "figure"), Output("towns", "figure"),
+                  Output("documented", "data"),
                   Input("countries", "value"), Input("magnitude", "value"), Input("period", "start_date"),
                   Input("period", "end_date"), Input("radius", "value"), Input("min-pop", "value"))
     def update_summary(countries, mags, start, end, radius, min_pop):
         if not countries:
             msg = empty_figure("Pick at least one country")
-            return [kpi("Earthquakes", "0")], msg, msg
+            return [kpi("Earthquakes", "0")], msg, msg, []
         with closing(q.connect(db_path)) as conn:
             ev = q.earthquakes(conn, countries, mags, (start[:10], end[:10]))
             towns = q.town_ranking(conn, countries, mags, (start[:10], end[:10]), radius, min_population=min_pop)
+            docs = q.documented(conn, countries, mags, (start[:10], end[:10]))
         if ev.empty:
             msg = empty_figure("No earthquake matches these filters")
-            return [kpi("Earthquakes", "0")], msg, msg
+            return [kpi("Earthquakes", "0")], msg, msg, []
         strongest = ev.loc[ev["magnitude"].idxmax()]
         years = ev["year"].nunique()
         kpis = [
@@ -142,13 +158,18 @@ def create_app(db_path=None):
             kpi("Most exposed town", towns.iloc[0]["place_name"] if len(towns) else "-",
                 f"{int(towns.iloc[0]['earthquakes'])} earthquakes within {radius} km" if len(towns) else ""),
         ]
-        per_year = ev.groupby(["year", "country_code"]).size().reset_index(name="earthquakes")
+        # every year of the period and every selected country, zeros included: a quiet year is an answer too
+        years = range(int(start[:4]), int(end[:4]) + 1)
+        grid = pd.MultiIndex.from_product([years, countries], names=["year", "country_code"])
+        per_year = (ev.groupby(["year", "country_code"]).size().reindex(grid, fill_value=0)
+                    .reset_index(name="earthquakes"))
         per_year["country"] = per_year["country_code"].map(COUNTRY_NAMES)
+        per_year["year"] = per_year["year"].astype(str)
         fig_year = px.bar(per_year, x="year", y="earthquakes", color="country",
                           color_discrete_map={COUNTRY_NAMES[c]: col for c, col in COUNTRY_COLORS.items()},
                           labels={"year": "", "earthquakes": "M4+ earthquakes"}, template="plotly_white")
-        fig_year.update_layout(height=380, legend_title_text="", margin={"t": 10, "l": 50, "r": 10, "b": 30},
-                               xaxis={"dtick": 1})
+        fig_year.update_layout(height=330, legend_title_text="", margin={"t": 10, "l": 50, "r": 10, "b": 30},
+                               xaxis={"type": "category"}, barmode="stack")
         towns = towns.sort_values("earthquakes")
         towns["label"] = towns["place_name"] + " (" + towns["place_country"] + ")"
         fig_towns = px.bar(towns, x="earthquakes", y="label", orientation="h", template="plotly_white",
@@ -159,7 +180,7 @@ def create_app(db_path=None):
                                               "<br>strongest M%{customdata[2]:.1f}, closest %{customdata[3]:.1f} km"
                                               "<br>M5+: %{customdata[4]}<extra></extra>")
         fig_towns.update_layout(height=420, showlegend=False, margin={"t": 10, "l": 10, "r": 10, "b": 40})
-        return kpis, fig_year, fig_towns
+        return kpis, fig_year, fig_towns, docs.to_dict("records")
 
     # ---- remember the clicked town -----------------------------------------------------------------
     @app.callback(Output("selected-town", "data"), Input("towns", "clickData"), prevent_initial_call=True)
@@ -184,8 +205,8 @@ def create_app(db_path=None):
         if not ev.empty:
             fig.add_trace(go.Scattergeo(
                 lat=ev["latitude"], lon=ev["longitude"], mode="markers",
-                marker={"size": (ev["magnitude"] - 3.5) ** 2 * 2.2, "color": ev["magnitude"],
-                        "colorscale": "YlOrRd", "cmin": 4, "cmax": max(6.5, ev["magnitude"].max()),
+                marker={"size": 4 + (ev["magnitude"] - 4.0) ** 1.6 * 5, "color": ev["magnitude"],
+                        "colorscale": "YlOrRd", "cmin": 3.6, "cmax": max(6.5, ev["magnitude"].max()),
                         "line": {"width": 0.4, "color": "#555"}, "opacity": 0.8,
                         "colorbar": {"title": "Mag.", "thickness": 12, "len": 0.6}},
                 text=("M" + ev["magnitude"].map("{:.1f}".format) + " | " + ev["event_time_utc"].dt.strftime("%d %b %Y")
@@ -205,14 +226,14 @@ def create_app(db_path=None):
             title = f"{t['place_name']}: {len(near)} earthquakes within {radius} km (population {t['population']:,})"
             rows = near.assign(is_documented=near["is_documented"].map({1: "yes", 0: ""})).to_dict("records")
             names = {"time_utc": "Time (UTC)", "magnitude": "Mag.", "depth_km": "Depth (km)",
-                     "distance_km": "Distance (km)", "usgs_place_text": "USGS location",
-                     "is_documented": "On Wikipedia", "wiki_deaths": "Deaths (Wikipedia)", "event_id": "USGS id"}
+                     "distance_km": "Distance (km)", "epicentre_town": "Nearest town to the epicentre",
+                     "is_documented": "On Wikipedia", "wiki_deaths": "Deaths", "event_id": "USGS id"}
             cols = [{"name": names[c], "id": c} for c in names]
         fig.update_geos(projection_type="mercator", resolution=50, showcountries=True, countrycolor="#999",
                         showcoastlines=True, coastlinecolor="#777", showland=True, landcolor="#f4f1ea",
                         showocean=True, oceancolor="#e6f0f5", lataxis_range=MAP_RANGE["lat"],
                         lonaxis_range=MAP_RANGE["lon"])
-        fig.update_layout(height=470, margin={"t": 0, "l": 0, "r": 0, "b": 0}, showlegend=False)
+        fig.update_layout(height=520, margin={"t": 0, "l": 0, "r": 0, "b": 0}, showlegend=False)
         return fig, rows, cols, title
 
     return app
