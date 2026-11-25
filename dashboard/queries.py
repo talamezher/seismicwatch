@@ -31,11 +31,13 @@ def earthquakes(conn, countries, mag_range, date_range):
     return df
 
 
-def town_ranking(conn, countries, mag_range, date_range, radius_km=50, top=15):
+def town_ranking(conn, countries, mag_range, date_range, radius_km=50, top=15, min_population=0):
     """Settlements of the selected countries ranked by the number of M4+ earthquakes within the radius."""
     clauses, params = _where(countries, mag_range, date_range)
     clauses.append(f"place_country IN ({','.join('?' * len(countries))})")
     params += list(countries)
+    clauses.append("population >= ?")
+    params.append(int(min_population))
     if radius_km == 25:
         clauses.append("within_25km = 1")
     sql = f"""

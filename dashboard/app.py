@@ -81,6 +81,10 @@ def create_app(db_path=None):
             html.Div([html.Label("Town exposure radius"),
                       dcc.RadioItems(id="radius", value=50, inline=True,
                                      options=[{"label": " 25 km", "value": 25}, {"label": " 50 km", "value": 50}])]),
+            html.Div([html.Label("Towns in the ranking"),
+                      dcc.RadioItems(id="min-pop", value=10_000, inline=True,
+                                     options=[{"label": " all", "value": 0}, {"label": " 10,000+", "value": 10_000},
+                                              {"label": " 100,000+", "value": 100_000}])]),
         ]),
         html.Div(id="kpis", className="kpis"),
         html.Div(className="row", children=[
@@ -96,8 +100,8 @@ def create_app(db_path=None):
         html.Div(className="row", children=[
             html.Div(className="card", children=[
                 html.H3("Most exposed towns"),
-                html.P("Settlements with the most M4+ earthquakes within the radius (GeoNames population).",
-                       className="hint"),
+                html.P("Settlements with the most M4+ earthquakes within the radius (population from GeoNames). "
+                       "Click a bar to see the town on the map.", className="hint"),
                 dcc.Graph(id="towns", config=GRAPH_CONFIG)]),
             html.Div(className="card", children=[
                 html.H3(id="town-title", children="Earthquakes near the selected town"),
@@ -117,14 +121,14 @@ def create_app(db_path=None):
     # ---- callback 1: filters -> headline numbers, yearly chart, town ranking ------------------------
     @app.callback(Output("kpis", "children"), Output("per-year", "figure"), Output("towns", "figure"),
                   Input("countries", "value"), Input("magnitude", "value"), Input("period", "start_date"),
-                  Input("period", "end_date"), Input("radius", "value"))
-    def update_summary(countries, mags, start, end, radius):
+                  Input("period", "end_date"), Input("radius", "value"), Input("min-pop", "value"))
+    def update_summary(countries, mags, start, end, radius, min_pop):
         if not countries:
             msg = empty_figure("Pick at least one country")
             return [kpi("Earthquakes", "0")], msg, msg
         with closing(q.connect(db_path)) as conn:
             ev = q.earthquakes(conn, countries, mags, (start[:10], end[:10]))
-            towns = q.town_ranking(conn, countries, mags, (start[:10], end[:10]), radius)
+            towns = q.town_ranking(conn, countries, mags, (start[:10], end[:10]), radius, min_population=min_pop)
         if ev.empty:
             msg = empty_figure("No earthquake matches these filters")
             return [kpi("Earthquakes", "0")], msg, msg
