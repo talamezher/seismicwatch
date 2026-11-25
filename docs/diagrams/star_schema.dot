@@ -1,0 +1,39 @@
+digraph S {
+  rankdir=LR; nodesep=0.3; ranksep=0.9;
+  node [shape=plaintext, fontname="Helvetica", fontsize=10];
+  edge [color="#5b6774", arrowhead=crow, arrowtail=tee, dir=both];
+  fact [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#fde2dd" color="#9c3b2d">
+    <tr><td bgcolor="#c0392b"><font color="white"><b>fact_earthquake</b></font></td></tr>
+    <tr><td align="left"><i>grain: one earthquake (USGS event id)</i></td></tr>
+    <tr><td align="left"><b>event_id</b> PK</td></tr>
+    <tr><td align="left" port="d">date_key FK</td></tr><tr><td align="left" port="p">place_key FK (nearest town)</td></tr>
+    <tr><td align="left" port="c">country_key FK</td></tr><tr><td align="left" port="m">magnitude_band_key FK</td></tr>
+    <tr><td align="left" port="v">event_version_key FK</td></tr>
+    <tr><td align="left">magnitude, depth_km, depth_class</td></tr><tr><td align="left">latitude, longitude, event_time_utc</td></tr>
+    <tr><td align="left">distance_to_place_km</td></tr><tr><td align="left">places / population within 25 and 50 km</td></tr>
+    <tr><td align="left">is_documented, wiki_deaths, in_study_period</td></tr></table>>];
+  exp [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#fdeee9" color="#9c3b2d">
+    <tr><td bgcolor="#d35445"><font color="white"><b>fact_place_exposure</b></font></td></tr>
+    <tr><td align="left"><i>grain: one earthquake x one town within 50 km</i></td></tr>
+    <tr><td align="left" port="e"><b>event_id</b> PK, FK</td></tr><tr><td align="left" port="p"><b>place_key</b> PK, FK</td></tr>
+    <tr><td align="left" port="d">date_key FK</td></tr><tr><td align="left">distance_km, within_25km</td></tr></table>>];
+  dd [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#eef3f7" color="#4a5560">
+    <tr><td bgcolor="#34495e"><font color="white"><b>dim_date</b></font></td></tr><tr><td align="left"><b>date_key</b> yyyymmdd</td></tr>
+    <tr><td align="left">full_date, year, quarter, month,</td></tr><tr><td align="left">month_name, day_of_week, is_weekend</td></tr></table>>];
+  dp [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#eef3f7" color="#4a5560">
+    <tr><td bgcolor="#34495e"><font color="white"><b>dim_place</b></font></td></tr><tr><td align="left"><b>place_key</b> = GeoNames id</td></tr>
+    <tr><td align="left" port="c">place_name, country_key FK</td></tr><tr><td align="left">feature_code, admin1_code</td></tr>
+    <tr><td align="left">latitude, longitude</td></tr><tr><td align="left">population, population_class</td></tr></table>>];
+  dc [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#eef3f7" color="#4a5560">
+    <tr><td bgcolor="#34495e"><font color="white"><b>dim_country</b></font></td></tr><tr><td align="left"><b>country_key</b></td></tr>
+    <tr><td align="left">country_code (ISO 2, XX = at sea)</td></tr><tr><td align="left">country_name, is_study_country</td></tr></table>>];
+  dm [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#eef3f7" color="#4a5560">
+    <tr><td bgcolor="#34495e"><font color="white"><b>dim_magnitude_band</b></font></td></tr><tr><td align="left"><b>magnitude_band_key</b></td></tr>
+    <tr><td align="left">band_label, min/max magnitude,</td></tr><tr><td align="left">usgs_class</td></tr></table>>];
+  dv [label=<<table border="1" cellborder="0" cellspacing="0" cellpadding="3" bgcolor="#f3eefb" color="#5b4a80">
+    <tr><td bgcolor="#6c5a99"><font color="white"><b>dim_event_version</b> (type 2)</font></td></tr><tr><td align="left"><b>event_version_key</b></td></tr>
+    <tr><td align="left">event_id, version_no</td></tr><tr><td align="left">magnitude, mag_type, review_status,</td></tr>
+    <tr><td align="left">location, depth, place_text</td></tr><tr><td align="left">valid_from, valid_to, is_current</td></tr></table>>];
+  dd -> fact:d; dp -> fact:p; dc -> fact:c; dm -> fact:m; dv -> fact:v;
+  fact -> exp:e; dp -> exp:p; dd -> exp:d; dc -> dp:c;
+}

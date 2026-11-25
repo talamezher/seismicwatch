@@ -1,0 +1,25 @@
+digraph G {
+  rankdir=TB; splines=spline; nodesep=0.4; ranksep=0.42; newrank=true;
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, color="#4a5560", penwidth=1.1, margin="0.15,0.07"];
+  edge [color="#5b6774", arrowsize=0.7, fontname="Helvetica", fontsize=9.5, fontcolor="#5b6774"];
+  usgs [label="USGS earthquake catalogue\nAPI (GeoJSON), paged with limit/offset,\nincremental with updatedafter", fillcolor="#fde2dd"];
+  geo  [label="GeoNames dumps\nfiles LB, TR, CY, cities1000\n(zipped TSV, UTF-8)", fillcolor="#fdf0d5"];
+  wiki [label="Wikipedia web page\nList of earthquakes in Turkey\n(HTML tables)", fillcolor="#e2eefa"];
+  {rank=same; usgs; geo; wiki;}
+  client [label="EXTRACT  src/extract\nPoliteSession: User-Agent + contact, 60 s timeout, 1 s between requests,\nretry 429/5xx with backoff, never other 4xx · USGS: checkpoint per year window,\nwatermark + 1-day overlap · GeoNames: If-Modified-Since · Wikipedia: robots.txt", fillcolor="#ffffff"];
+  raw [label="RAW layer  data/raw/   (never edited, re-runs replace, never duplicate)\nfiles exactly as received + manifest.jsonl: source, URL, time, records, bytes, SHA-256", fillcolor="#e9e3d7", shape=cylinder];
+  stg [label="STAGING  data/staging/*.parquet\nstg_events · stg_places · stg_wiki_quakes\n1 rename 2 cast 3 standardize\n4 placeholders → missing 5 newest version 6 flag", fillcolor="#e4e9ee"];
+  tests [label="DATA TESTS  src/quality\nQ1-Q6, P1, K1 → quarantine (with reason)\nS1-S5, R1-R7 → stop (load nothing)\nW1-W4 → warn (log)", fillcolor="#fff4f2"];
+  enrich [label="JOINS + RULES  src/transform\nJ1 nearest town · J2 Wikipedia list\nJ3 towns within 50 km (row counts checked)\nBR-1 country · BR-2 band · BR-3 exposure ...", fillcolor="#e4e9ee"];
+  {rank=same; stg; tests; enrich;}
+  wh [label="WAREHOUSE  SQLite  data/warehouse/seismicwatch.db\nstar schema: fact_earthquake, fact_place_exposure, 5 dimensions\nidempotent upsert in one transaction · run_log · quarantine · test results", fillcolor="#dcefe3", shape=cylinder];
+  dash [label="DASHBOARD  dashboard/app.py (Dash)\nmap · per year · exposed towns · event table\n2 callbacks, read-only SQL", fillcolor="#e7e1f5"];
+  run [label="run_pipeline.py\none command · log file\nrun_log row", shape=note, fillcolor="#ffffff"];
+  gha [label="GitHub Actions\ndaily 03:17 UTC (schedule)\nCI on every push", shape=note, fillcolor="#ffffff"];
+  {rank=same; wh; run; gha;}
+  usgs -> client; geo -> client; wiki -> client;
+  client -> raw [label="  save first, parse later"];
+  raw -> stg; stg -> tests -> enrich;
+  enrich -> wh; wh -> dash;
+  gha -> run [style=dashed, label=" runs"]; run -> wh [style=dashed, dir=back, arrowtail=none];
+}

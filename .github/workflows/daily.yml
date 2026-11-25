@@ -1,0 +1,61 @@
+name: Daily pipeline
+
+# Extension "scheduling": the pipeline runs by itself every day at 03:17 UTC.
+# The data/ folder (raw layer, watermark, warehouse) is kept between runs in the
+# GitHub Actions cache, so each day is an incremental run on top of the last one,
+# and every run adds a row to the run_log table of the warehouse.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "Force a full USGS extraction"
+        type: boolean
+        default: false
+
+concurrency:
+  group: daily-pipeline          # never two runs writing the same data at once
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install the pinned packages
+        run: pip install -r requirements.txt
+      - name: Restore yesterday's data
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: seismicwatch-data-${{ github.run_id }}
+          restore-keys: seismicwatch-data-
+      - name: Run the pipeline
+        env:
+          SEISMICWATCH_CONTACT_EMAIL: ${{ vars.SEISMICWATCH_CONTACT_EMAIL }}
+        run: python run_pipeline.py ${{ inputs.full && '--full' || '' }}
+      - name: Save today's data
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: seismicwatch-data-${{ github.run_id }}
+      - name: Job summary (run log, tests, quarantine, joins)
+        if: always()
+        run: python scripts/run_report.py >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep the log and the warehouse
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seismicwatch-run-${{ github.run_id }}
+          path: |
+            logs/*.log
+            data/warehouse/seismicwatch.db
+            data/raw/manifest.jsonl
+          retention-days: 30

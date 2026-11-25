@@ -1,0 +1,41 @@
+name: CI
+
+# Extension "continuous integration": on every push and pull request, run the unit
+# tests, then a small end-to-end run of the whole pipeline on a sample of real raw
+# files (tests/fixtures/raw), twice, and check the second run changed nothing.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install the pinned packages
+        run: pip install -r requirements.txt
+      - name: Unit tests
+        run: pytest -q
+      - name: End-to-end run on the sample (twice, must be idempotent)
+        env:
+          SEISMICWATCH_DATA_DIR: ${{ runner.temp }}/data
+          SEISMICWATCH_LOG_DIR: ${{ runner.temp }}/logs
+          SEISMICWATCH_MIN_EVENTS: "50"
+        run: |
+          mkdir -p "$SEISMICWATCH_DATA_DIR"
+          cp -r tests/fixtures/raw "$SEISMICWATCH_DATA_DIR/raw"
+          python scripts/check_rerun.py --run-date 2026-11-14 | tee -a "$GITHUB_STEP_SUMMARY"
+          python scripts/run_report.py "$SEISMICWATCH_DATA_DIR/warehouse/seismicwatch.db" >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs
+          path: ${{ runner.temp }}/logs
+          retention-days: 7
