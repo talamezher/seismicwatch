@@ -1,0 +1,13 @@
+# Python 3.11 or newer. Every package pinned, so a fresh clone builds the same environment.
+pandas==2.2.3
+numpy==2.1.3
+pyarrow==18.1.0
+requests==2.32.3
+python-dotenv==1.0.1
+lxml==5.3.0
+beautifulsoup4==4.12.3
+html5lib==1.1
+dash==2.18.2
+plotly==5.24.1
+pytest==8.3.4
+tabulate==0.9.0

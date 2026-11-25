@@ -1,0 +1,15 @@
+# secrets and local settings
+.env
+# data: raw, staging, state and the warehouse are rebuilt by run_pipeline.py
+data/
+logs/*.log
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+# editors and OS
+.vscode/
+.idea/
+.DS_Store
