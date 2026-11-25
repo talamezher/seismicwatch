@@ -1,0 +1,56 @@
+name: Snapshot run
+
+# Manual run that builds everything from scratch on a GitHub runner:
+# full extraction, then an incremental run, then the re-run (idempotency) proof.
+# It seeds the cache that the daily workflow continues from, and publishes the
+# logs and the warehouse to the branch pipeline-snapshot for the report.
+on:
+  push:
+    paths: [".github/workflows/snapshot.yml", "src/**", "run_pipeline.py"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-pipeline
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install the pinned packages
+        run: pip install -r requirements.txt
+      - name: Run 1, full extraction
+        run: python run_pipeline.py --full
+      - name: Run 2, incremental
+        run: python run_pipeline.py
+      - name: Runs 3 and 4, rebuild from raw twice (idempotency proof)
+        run: python scripts/check_rerun.py | tee rerun_proof.md
+      - name: Job summary
+        if: always()
+        run: python scripts/run_report.py >> "$GITHUB_STEP_SUMMARY"
+      - name: Seed the cache for the daily runs
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: seismicwatch-data-${{ github.run_id }}
+      - name: Publish the outputs to the pipeline-snapshot branch
+        if: always()
+        run: |
+          mkdir -p /tmp/snap
+          cp -r data logs /tmp/snap/ || true
+          cp rerun_proof.md /tmp/snap/ || true
+          cd /tmp/snap
+          git init -q && git checkout -q -b pipeline-snapshot
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "Snapshot of run ${{ github.run_id }}"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" pipeline-snapshot
